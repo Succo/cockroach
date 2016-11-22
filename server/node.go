@@ -87,11 +87,11 @@ type nodeMetrics struct {
 	Err     metric.Rates
 }
 
-func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
+func makeNodeMetrics(reg *metric.Registry, clock *hlc.Clock) nodeMetrics {
 	nm := nodeMetrics{
-		Latency: metric.NewLatency(metaExecLatency),
-		Success: metric.NewRates(metaExecSuccess),
-		Err:     metric.NewRates(metaExecError),
+		Latency: metric.NewLatency(metaExecLatency, clock),
+		Success: metric.NewRates(metaExecSuccess, clock),
+		Err:     metric.NewRates(metaExecError, clock),
 	}
 	reg.AddMetricStruct(nm)
 	return nm
@@ -259,7 +259,7 @@ func NewNode(
 		ctx:         ctx,
 		stopper:     stopper,
 		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg),
+		metrics:     makeNodeMetrics(reg, ctx.Clock),
 		stores:      storage.NewStores(ctx.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,

@@ -141,20 +141,20 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	if tc.stopper == nil {
 		tc.stopper = stop.NewStopper()
 	}
+	if tc.manualClock == nil {
+		tc.manualClock = hlc.NewManualClock(0)
+	}
+	if tc.clock == nil {
+		tc.clock = hlc.NewClock(tc.manualClock.UnixNano)
+	}
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, tc.stopper)
 		server := rpc.NewServer(rpcContext) // never started
 		tc.gossip = gossip.New(
-			context.Background(), rpcContext, server, nil, tc.stopper, metric.NewRegistry())
+			context.Background(), rpcContext, server, nil, tc.stopper, metric.NewRegistry(), tc.clock)
 		tc.gossip.SetNodeID(1)
-	}
-	if tc.manualClock == nil {
-		tc.manualClock = hlc.NewManualClock(0)
-	}
-	if tc.clock == nil {
-		tc.clock = hlc.NewClock(tc.manualClock.UnixNano)
 	}
 	if tc.engine == nil {
 		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, tc.stopper)

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
@@ -48,7 +49,7 @@ func startGossipAtAddr(nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopp
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	server := rpc.NewServer(rpcContext)
-	g := New(context.TODO(), rpcContext, server, nil, stopper, registry)
+	g := New(context.TODO(), rpcContext, server, nil, stopper, registry, hlc.NewClock(hlc.UnixNano))
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +109,7 @@ func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Sto
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
-	local := New(context.TODO(), lRPCContext, lserver, nil, stopper, metric.NewRegistry())
+	local := New(context.TODO(), lRPCContext, lserver, nil, stopper, metric.NewRegistry(), hlc.NewClock(hlc.UnixNano))
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +156,8 @@ func TestClientGossip(t *testing.T) {
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
-	c := newClient(context.TODO(), remote.GetNodeAddr(), makeMetrics())
+	clock := hlc.NewClock(hlc.UnixNano)
+	c := newClient(context.TODO(), remote.GetNodeAddr(), makeMetrics(clock), clock)
 
 	defer func() {
 		stopper.Stop()
@@ -199,10 +201,11 @@ func TestClientGossipMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	clock := hlc.NewClock(hlc.UnixNano)
 	gossipSucceedsSoon(
 		t, stopper, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(context.TODO(), local.GetNodeAddr(), remote.nodeMetrics): remote,
+			newClient(context.TODO(), local.GetNodeAddr(), remote.nodeMetrics, clock): remote,
 		},
 		func() error {
 			// Infos/Bytes Sent/Received should not be zero.
@@ -252,7 +255,8 @@ func TestClientNodeID(t *testing.T) {
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
-	c := newClient(context.TODO(), &remote.nodeAddr, makeMetrics())
+	clock := hlc.NewClock(hlc.UnixNano)
+	c := newClient(context.TODO(), &remote.nodeAddr, makeMetrics(clock), clock)
 	disconnected := make(chan *client, 1)
 	disconnected <- c
 
@@ -415,7 +419,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 			t.Fatal(err)
 		}
 		resolvers = append(resolvers, resolver)
-		gnode := New(context.TODO(), RPCContext, server, resolvers, stopper, metric.NewRegistry())
+		gnode := New(context.TODO(), RPCContext, server, resolvers, stopper, metric.NewRegistry(), hlc.NewClock(hlc.UnixNano))
 		// node ID must be non-zero
 		gnode.SetNodeID(roachpb.NodeID(i + 1))
 		g = append(g, gnode)
@@ -491,7 +495,8 @@ func TestClientForwardUnresolved(t *testing.T) {
 	local := startGossip(nodeID, stopper, t, metric.NewRegistry())
 	addr := local.GetNodeAddr()
 
-	client := newClient(context.TODO(), addr, makeMetrics()) // never started
+	clock := hlc.NewClock(hlc.UnixNano)
+	client := newClient(context.TODO(), addr, makeMetrics(clock), clock) // never started
 
 	newAddr := util.UnresolvedAddr{
 		NetworkField: "tcp",

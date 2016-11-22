@@ -76,7 +76,8 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		grpcServer,
 		serverCtx.GossipBootstrapResolvers,
 		stopper,
-		metric.NewRegistry())
+		metric.NewRegistry(),
+		ctx.Clock)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -103,11 +104,11 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}, g)
 	ctx.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
 	sender := kv.NewTxnCoordSender(ctx.Ctx, distSender, ctx.Clock, false, stopper,
-		kv.MakeTxnMetrics())
+		kv.MakeTxnMetrics(ctx.Clock))
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
-		kv.MakeTxnMetrics(), sql.MakeEventLogger(nil))
+		kv.MakeTxnMetrics(ctx.Clock), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
 	return grpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
@@ -147,7 +148,7 @@ func TestBootstrapCluster(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(hlc.NewClock(hlc.UnixNano))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -188,7 +189,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(hlc.NewClock(hlc.UnixNano))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,7 +231,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(hlc.NewClock(hlc.UnixNano))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -297,7 +298,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(hlc.NewClock(hlc.UnixNano))); err != nil {
 		t.Fatal(err)
 	}
 

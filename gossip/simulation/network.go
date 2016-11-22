@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
@@ -103,7 +104,7 @@ func (n *Network) CreateNode() (*Node, error) {
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.New(context.TODO(), n.rpcContext, server, nil, n.Stopper, node.Registry)
+	node.Gossip = gossip.New(context.TODO(), n.rpcContext, server, nil, n.Stopper, node.Registry, hlc.NewClock(hlc.UnixNano))
 	n.Stopper.RunWorker(func() {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())

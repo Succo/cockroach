@@ -152,13 +152,6 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50)
 
-	// Ensure the metric system's view of time does not advance during this test
-	// as the test expects time to not advance too far which would age the actual
-	// data (e.g. in histogram's) unexpectedly.
-	defer metric.TestingSetNow(func() time.Time {
-		return time.Unix(0, manual.UnixNano()).UTC()
-	})()
-
 	// ========================================
 	// Generate Metrics Data & Expected Results
 	// ========================================
@@ -272,7 +265,7 @@ func TestMetricsRecorder(t *testing.T) {
 				c.Inc((data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "rate":
-				r := metric.NewRates(metric.Metadata{Name: reg.prefix + data.name})
+				r := metric.NewRates(metric.Metadata{Name: reg.prefix + data.name}, hlc.NewClock(manual.UnixNano))
 				reg.reg.AddMetricGroup(r)
 				r.Add(data.val)
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, data.val, reg.isNode)
@@ -282,14 +275,14 @@ func TestMetricsRecorder(t *testing.T) {
 					addExpected(reg.prefix, data.name+sep+scale.Name(), reg.source, 100, 0, reg.isNode)
 				}
 			case "histogram":
-				h := metric.NewHistogram(metric.Metadata{Name: reg.prefix + data.name}, time.Second, 1000, 2)
+				h := metric.NewHistogram(metric.Metadata{Name: reg.prefix + data.name}, time.Second, 1000, 2, hlc.NewClock(manual.UnixNano))
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 			case "latency":
-				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name})
+				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name}, hlc.NewClock(manual.UnixNano))
 				reg.reg.AddMetricGroup(l)
 				l.RecordValue(data.val)
 				// Latency is simply three histograms (at different resolution

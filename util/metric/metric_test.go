@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util/hlc"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
@@ -62,22 +63,18 @@ func TestCounter(t *testing.T) {
 	testMarshal(t, c, "90")
 }
 
-func setNow(d time.Duration) {
-	now = func() time.Time {
-		return time.Time{}.Add(d)
-	}
-}
-
 func TestHistogramRotate(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
-	h := NewHistogram(emptyMetadata, histWrapNum*time.Second, 1000+10*histWrapNum, 3)
-	var cur time.Duration
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	h := NewHistogram(emptyMetadata, histWrapNum*time.Second, 1000+10*histWrapNum, 3, clock)
+	var cur int64
 	for i := 0; i < 3*histWrapNum; i++ {
 		v := int64(10 * i)
 		h.RecordValue(v)
-		cur += time.Second
-		setNow(cur)
+		cur += 1000000000
+		manual.Set(cur)
+		clock = hlc.NewClock(manual.UnixNano)
+		h.testingSetClock(clock)
 		cur := h.Current()
 
 		// When i == histWrapNum-1, we expect the entry from i==0 to move out
@@ -98,19 +95,19 @@ func TestHistogramRotate(t *testing.T) {
 }
 
 func TestHistogramJSON(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
-	h := NewHistogram(emptyMetadata, 0, 1, 3)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	h := NewHistogram(emptyMetadata, 0, 1, 3, clock)
 	testMarshal(t, h, `[{"Quantile":100,"Count":0,"ValueAt":0}]`)
 	h.RecordValue(1)
 	testMarshal(t, h, `[{"Quantile":0,"Count":1,"ValueAt":1},{"Quantile":100,"Count":1,"ValueAt":1}]`)
 }
 
 func TestRateRotate(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
 	const interval = 10 * time.Second
-	r := NewRate(emptyMetadata, interval)
+	r := NewRate(emptyMetadata, interval, clock)
 
 	// Skip the warmup phase of the wrapped EWMA for this test.
 	for i := 0; i < 100; i++ {
@@ -120,14 +117,16 @@ func TestRateRotate(t *testing.T) {
 	// Put something nontrivial in.
 	r.Add(100)
 
-	for cur := time.Duration(0); cur < 5*interval; cur += time.Second / 2 {
+	for cur := int64(0); cur < 10; cur++ {
 		prevVal := r.Value()
-		setNow(cur)
+		manual.Set(cur * 10 * 1000000000)
+		clock = hlc.NewClock(manual.UnixNano)
+		r.testingSetClock(clock)
 		curVal := r.Value()
-		expChange := (cur % time.Second) != 0
+		expChange := (time.Duration(cur*500) % time.Second) != 0
 		hasChange := prevVal != curVal
 		if expChange != hasChange {
-			t.Fatalf("%s: expChange %t, hasChange %t (from %v to %v)",
+			t.Fatalf("%v: expChange %t, hasChange %t (from %v to %v)",
 				cur, expChange, hasChange, prevVal, curVal)
 		}
 	}

@@ -1131,16 +1131,17 @@ func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
+	clock := hlc.NewClock(hlc.UnixNano)
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(context.Background(), rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(context.Background(), rpcContext, server, nil, stopper, metric.NewRegistry(), clock)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(
 		g,
-		hlc.NewClock(hlc.UnixNano),
+		clock,
 		nil,
 		/* reservationsEnabled */ true,
 		TestTimeUntilStoreDeadOff,

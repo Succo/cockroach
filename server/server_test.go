@@ -210,7 +210,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}, ts.Gossip())
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	tds := kv.NewTxnCoordSender(ctx, ds, s.Clock(), ts.Ctx.Linearizable,
-		ts.stopper, kv.MakeTxnMetrics())
+		ts.stopper, kv.MakeTxnMetrics(s.Clock()))
 
 	if err := ts.node.ctx.DB.AdminSplit("m"); err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		}, ts.Gossip())
 		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 		tds := kv.NewTxnCoordSender(ctx, ds, ts.Clock(), ts.Ctx.Linearizable,
-			ts.stopper, kv.MakeTxnMetrics())
+			ts.stopper, kv.MakeTxnMetrics(s.Clock()))
 
 		for _, sk := range tc.splitKeys {
 			if err := ts.node.ctx.DB.AdminSplit(sk); err != nil {

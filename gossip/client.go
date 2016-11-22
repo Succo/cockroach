@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -58,14 +59,14 @@ func extractKeys(delta map[string]*Info) string {
 }
 
 // newClient creates and returns a client struct.
-func newClient(ctx context.Context, addr net.Addr, nodeMetrics Metrics) *client {
+func newClient(ctx context.Context, addr net.Addr, nodeMetrics Metrics, clock *hlc.Clock) *client {
 	return &client{
 		ctx:       ctx,
 		createdAt: timeutil.Now(),
 		addr:      addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
-		clientMetrics:         makeMetrics(),
+		clientMetrics:         makeMetrics(clock),
 		nodeMetrics:           nodeMetrics,
 	}
 }

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -104,7 +105,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	rttc.nodeRPCContext = rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, rttc.stopper)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.New(
-		context.TODO(), rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry())
+		context.TODO(), rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry(), hlc.NewClock(hlc.UnixNano))
 	rttc.gossip.SetNodeID(1)
 	return rttc
 }

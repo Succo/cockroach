@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -68,13 +69,13 @@ type server struct {
 }
 
 // newServer creates and returns a server struct.
-func newServer(ctx context.Context, stopper *stop.Stopper, registry *metric.Registry) *server {
+func newServer(ctx context.Context, stopper *stop.Stopper, registry *metric.Registry, clock *hlc.Clock) *server {
 	s := &server{
 		ctx:           ctx,
 		stopper:       stopper,
 		tighten:       make(chan roachpb.NodeID, 1),
-		nodeMetrics:   makeMetrics(),
-		serverMetrics: makeMetrics(),
+		nodeMetrics:   makeMetrics(clock),
+		serverMetrics: makeMetrics(clock),
 	}
 
 	s.mu.is = newInfoStore(ctx, 0, util.UnresolvedAddr{}, stopper)

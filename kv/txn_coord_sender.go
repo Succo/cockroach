@@ -125,14 +125,14 @@ var (
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics.
-func MakeTxnMetrics() TxnMetrics {
+func MakeTxnMetrics(clock *hlc.Clock) TxnMetrics {
 	return TxnMetrics{
-		Aborts:     metric.NewRates(metaAbortsRates),
-		Commits:    metric.NewRates(metaCommitsRates),
-		Commits1PC: metric.NewRates(metaCommits1PCRates),
-		Abandons:   metric.NewRates(metaAbandonsRates),
-		Durations:  metric.NewLatency(metaDurationsHistograms),
-		Restarts:   metric.NewHistogram(metaRestartsHistogram, 60*time.Second, 100, 3),
+		Aborts:     metric.NewRates(metaAbortsRates, clock),
+		Commits:    metric.NewRates(metaCommitsRates, clock),
+		Commits1PC: metric.NewRates(metaCommits1PCRates, clock),
+		Abandons:   metric.NewRates(metaAbandonsRates, clock),
+		Durations:  metric.NewLatency(metaDurationsHistograms, clock),
+		Restarts:   metric.NewHistogram(metaRestartsHistogram, 60*time.Second, 100, 3, clock),
 	}
 }
 

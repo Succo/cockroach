@@ -19,6 +19,8 @@ package metric
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 func (r *Registry) findMetricByName(name string) Iterable {
@@ -82,6 +84,9 @@ func (r *Registry) getRate(name string) *Rate {
 }
 
 func TestRegistry(t *testing.T) {
+	manual := hlc.NewManualClock(100)
+	clock := hlc.NewClock(manual.UnixNano)
+
 	r := NewRegistry()
 
 	topGauge := NewGauge(Metadata{Name: "top.gauge"})
@@ -92,15 +97,15 @@ func TestRegistry(t *testing.T) {
 	topCounter := NewCounter(Metadata{Name: "top.counter"})
 	r.AddMetric(topCounter)
 
-	topRate := NewRate(Metadata{Name: "top.rate"}, time.Minute)
+	topRate := NewRate(Metadata{Name: "top.rate"}, time.Minute, clock)
 	r.AddMetric(topRate)
 
-	r.AddMetricGroup(NewRates(Metadata{Name: "top.rates"}))
-	r.AddMetric(NewHistogram(Metadata{Name: "top.hist"}, time.Minute, 1000, 3))
-	r.AddMetricGroup(NewLatency(Metadata{Name: "top.latency"}))
+	r.AddMetricGroup(NewRates(Metadata{Name: "top.rates"}, clock))
+	r.AddMetric(NewHistogram(Metadata{Name: "top.hist"}, time.Minute, 1000, 3, clock))
+	r.AddMetricGroup(NewLatency(Metadata{Name: "top.latency"}, clock))
 
 	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
-	r.AddMetricGroup(NewRates(Metadata{Name: "bottom.rates"}))
+	r.AddMetricGroup(NewRates(Metadata{Name: "bottom.rates"}, clock))
 	ms := &struct {
 		StructGauge     *Gauge
 		StructGauge64   *GaugeFloat64
@@ -119,10 +124,10 @@ func TestRegistry(t *testing.T) {
 		StructGauge:          NewGauge(Metadata{Name: "struct.gauge"}),
 		StructGauge64:        NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
 		StructCounter:        NewCounter(Metadata{Name: "struct.counter"}),
-		StructHistogram:      NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3),
-		StructRate:           NewRate(Metadata{Name: "struct.rate"}, time.Minute),
-		StructLatency:        NewLatency(Metadata{Name: "struct.latency"}),
-		StructRates:          NewRates(Metadata{Name: "struct.rates"}),
+		StructHistogram:      NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3, clock),
+		StructRate:           NewRate(Metadata{Name: "struct.rate"}, time.Minute, clock),
+		StructLatency:        NewLatency(Metadata{Name: "struct.latency"}, clock),
+		StructRates:          NewRates(Metadata{Name: "struct.rates"}, clock),
 		privateStructGauge:   NewGauge(Metadata{Name: "struct.private-gauge"}),
 		privateStructGauge64: NewGaugeFloat64(Metadata{Name: "struct.private-gauge64"}),
 		NotAMetric:           0,

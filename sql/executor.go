@@ -266,7 +266,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
 
-		Latency:          metric.NewLatency(MetaLatency),
+		Latency:          metric.NewLatency(MetaLatency, cfg.Clock),
 		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
 		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
 		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),

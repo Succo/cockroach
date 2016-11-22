@@ -27,8 +27,8 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/rcrowley/go-metrics"
 
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/syncutil"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const histWrapNum = 4 // number of histograms to keep in rolling window
@@ -108,26 +108,16 @@ var _ PrometheusExportable = &Histogram{}
 
 type periodic interface {
 	nextTick() time.Time
+	time() time.Time
 	tick()
+	testingSetClock(*hlc.Clock)
 }
 
 var _ periodic = &Histogram{}
 var _ periodic = &Rate{}
 
-var now = timeutil.Now
-
-// TestingSetNow changes the clock used by the metric system. For use by
-// testing to precisely control the clock.
-func TestingSetNow(f func() time.Time) func() {
-	origNow := now
-	now = f
-	return func() {
-		now = origNow
-	}
-}
-
 func maybeTick(m periodic) {
-	for m.nextTick().Before(now()) {
+	for m.nextTick().Before(m.time()) {
 		m.tick()
 	}
 }
@@ -139,6 +129,7 @@ type Histogram struct {
 
 	mu       syncutil.Mutex
 	windowed *hdrhistogram.WindowedHistogram
+	clock    *hlc.Clock
 	nextT    time.Time
 	duration time.Duration
 }
@@ -147,11 +138,12 @@ type Histogram struct {
 // Data is kept in the active window for approximately the given duration.
 // See the documentation for hdrhistogram.WindowedHistogram for details.
 func NewHistogram(metadata Metadata, duration time.Duration,
-	maxVal int64, sigFigs int) *Histogram {
+	maxVal int64, sigFigs int, clock *hlc.Clock) *Histogram {
 	return &Histogram{
 		Metadata: metadata,
 		maxVal:   maxVal,
-		nextT:    now(),
+		clock:    clock,
+		nextT:    clock.PhysicalTime(),
 		duration: duration,
 		windowed: hdrhistogram.NewWindowed(histWrapNum, 0, maxVal, sigFigs),
 	}
@@ -162,8 +154,16 @@ func (h *Histogram) tick() {
 	h.windowed.Rotate()
 }
 
+func (h *Histogram) time() time.Time {
+	return h.clock.PhysicalTime()
+}
+
 func (h *Histogram) nextTick() time.Time {
 	return h.nextT
+}
+
+func (h *Histogram) testingSetClock(c *hlc.Clock) {
+	h.clock = c
 }
 
 // MarshalJSON outputs to JSON.
@@ -315,22 +315,23 @@ type Rate struct {
 	curSum   float64
 	wrapped  ewma.MovingAverage
 	interval time.Duration
+	clock    *hlc.Clock
 	nextT    time.Time
 }
 
 // NewRate creates an EWMA rate on the given timescale. Timescales at
 // or below 2s are illegal and will cause a panic.
-func NewRate(metadata Metadata, timescale time.Duration) *Rate {
+func NewRate(metadata Metadata, timescale time.Duration, clock *hlc.Clock) *Rate {
 	const tickInterval = time.Second
 	if timescale <= 2*time.Second {
 		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
 	}
 	avgAge := float64(timescale) / float64(2*tickInterval)
-
 	return &Rate{
 		Metadata: metadata,
 		interval: tickInterval,
-		nextT:    now(),
+		clock:    clock,
+		nextT:    clock.PhysicalTime(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
 }
@@ -351,6 +352,14 @@ func (e *Rate) tick() {
 	e.nextT = e.nextT.Add(e.interval)
 	e.wrapped.Add(e.curSum)
 	e.curSum = 0
+}
+
+func (e *Rate) time() time.Time {
+	return e.clock.PhysicalTime()
+}
+
+func (e *Rate) testingSetClock(c *hlc.Clock) {
+	e.clock = c
 }
 
 // Add adds the given measurement to the Rate.

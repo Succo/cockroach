@@ -117,7 +117,7 @@ func createTestStoreWithEngine(
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
-	sCtx.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
+	sCtx.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry(), clock)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.ScanMaxIdleTime = 1 * time.Second
 	tracer := tracing.NewTracer()
@@ -138,7 +138,7 @@ func createTestStoreWithEngine(
 	}, sCtx.Gossip)
 
 	sender := kv.NewTxnCoordSender(sCtx.Ctx, distSender, clock, false, stopper,
-		kv.MakeTxnMetrics())
+		kv.MakeTxnMetrics(clock))
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
 	sCtx.StorePool = storage.NewStorePool(
@@ -595,7 +595,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	}, m.gossips[idx])
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	sender := kv.NewTxnCoordSender(ctx, m.distSenders[idx], m.clock, false,
-		stopper, kv.MakeTxnMetrics())
+		stopper, kv.MakeTxnMetrics(m.clock))
 	m.dbs[idx] = client.NewDB(sender)
 }
 
@@ -653,7 +653,7 @@ func (m *multiTestContext) addStore(idx int) {
 		return []resolver.Resolver{r}
 	}()
 	m.gossips[idx] = gossip.New(
-		context.TODO(), m.rpcContext, grpcServer, resolvers, m.transportStopper, metric.NewRegistry())
+		context.TODO(), m.rpcContext, grpcServer, resolvers, m.transportStopper, metric.NewRegistry(), clock)
 	m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
 	if m.timeUntilStoreDead == 0 {
 		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff

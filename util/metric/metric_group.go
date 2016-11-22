@@ -16,7 +16,11 @@
 
 package metric
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/util/hlc"
+)
 
 // A TimeScale is a named duration.
 type TimeScale struct {
@@ -63,7 +67,7 @@ type metricGroup interface {
 //
 // TODO(mrtracy,tschottdorf): need to discuss roll-ups and generally how (and
 // which) information flows between metrics and time series.
-func NewLatency(metadata Metadata) Histograms {
+func NewLatency(metadata Metadata, clock *hlc.Clock) Histograms {
 	windows := DefaultTimeScales
 	hs := make(Histograms)
 	for _, w := range windows {
@@ -73,7 +77,7 @@ func NewLatency(metadata Metadata) Histograms {
 				Help:   metadata.Help,
 				labels: metadata.labels,
 			},
-			w.d, int64(time.Minute), 2)
+			w.d, int64(time.Minute), 2, clock)
 	}
 	return hs
 }
@@ -100,7 +104,7 @@ type Rates struct {
 
 // NewRates registers and returns a new Rates instance, which contains a set of EWMA-based rates
 // with generally useful time scales and a cumulative counter.
-func NewRates(metadata Metadata) Rates {
+func NewRates(metadata Metadata, clock *hlc.Clock) Rates {
 	scales := DefaultTimeScales
 	es := make(map[TimeScale]*Rate)
 	for _, scale := range scales {
@@ -109,7 +113,7 @@ func NewRates(metadata Metadata) Rates {
 				Name:   metadata.Name + sep + scale.name,
 				Help:   metadata.Help,
 				labels: metadata.labels,
-			}, scale.d)
+			}, scale.d, clock)
 	}
 	c := NewCounter(
 		Metadata{

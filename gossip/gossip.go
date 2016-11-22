@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -155,7 +156,7 @@ type Gossip struct {
 	bootstrapInfo BootstrapInfo       // BootstrapInfo proto for persistent storage
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
 	hasCleanedBS  bool
-
+	clock         *hlc.Clock
 	// Note that access to each client's internal state is serialized by the
 	// embedded server's mutex. This is surprising!
 	clientsMu struct {
@@ -203,13 +204,15 @@ func New(
 	resolvers []resolver.Resolver,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
+	clock *hlc.Clock,
 ) *Gossip {
 	ctx = log.WithEventLog(ctx, "gossip", "gossip")
 	g := &Gossip{
 		ctx:               ctx,
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
-		server:            newServer(ctx, stopper, registry),
+		server:            newServer(ctx, stopper, registry, clock),
+		clock:             clock,
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
 		bootstrapping:     map[string]struct{}{},
 		disconnected:      make(chan *client, 10),
@@ -1100,7 +1103,7 @@ func (g *Gossip) startClient(addr net.Addr, nodeID roachpb.NodeID) {
 	}
 
 	log.Eventf(g.ctx, "starting new client to %s", addr)
-	c := newClient(g.ctx, addr, g.serverMetrics)
+	c := newClient(g.ctx, addr, g.serverMetrics, g.clock)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, nodeID, breaker)
 }
@@ -1154,11 +1157,11 @@ func (m Metrics) String() string {
 }
 
 // makeMetrics makes a new metrics object with rates.
-func makeMetrics() Metrics {
+func makeMetrics(clock *hlc.Clock) Metrics {
 	return Metrics{
-		BytesReceived: metric.NewRates(MetaBytesReceivedRates),
-		BytesSent:     metric.NewRates(MetaBytesSentRates),
-		InfosReceived: metric.NewRates(MetaInfosReceivedRates),
-		InfosSent:     metric.NewRates(MetaInfosSentRates),
+		BytesReceived: metric.NewRates(MetaBytesReceivedRates, clock),
+		BytesSent:     metric.NewRates(MetaBytesSentRates, clock),
+		InfosReceived: metric.NewRates(MetaInfosReceivedRates, clock),
+		InfosSent:     metric.NewRates(MetaInfosSentRates, clock),
 	}
 }
